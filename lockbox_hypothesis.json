@@ -1,0 +1,27 @@
+{
+  "model": "M4_interactions",
+  "research_top3": {
+    "top_n": 3,
+    "hit": {
+      "mean": 0.4119933370349805,
+      "lo": 0.3877382935406255,
+      "hi": 0.43605867110864327,
+      "n_dates": 1801,
+      "block": 10
+    },
+    "net": {
+      "mean": 0.004311336909911272,
+      "lo": 0.002002604922602953,
+      "hi": 0.006633604213882077,
+      "n_dates": 1801,
+      "block": 10
+    },
+    "clears": true
+  },
+  "locked_regimes": [
+    7
+  ],
+  "cost_bps": 35.0,
+  "rule": "daily top-3; regime filter = stock-state regimes whose research top-3 net-return 95% block-bootstrap interval is above zero, with >= 150 dates",
+  "locked_at": "2026-09-26T21:59:13.399562"
+}

@@ -1,286 +1,226 @@
-# Feature Atlas - ATLAS_20260926_003
+# Regime + Feature Research - RUN_20260926_001
 
-Target `label_exit_ret` | per-date rank IC | BH-FDR q<0.05 | sign-stable in >= 80% of folds | |IC| >= 0.01
+Panel: `C:\QuantData\cache_daily\panel\panel.parquet`  
+Build signature: `b7feac2e004393a3`  
+Code: regime_research v8 | config hash `cdc1e6ffc1fbbc3f`
 
-**Exploratory. Nothing here feeds a model.** A 'working' cell is a feature whose cross-sectional ranking predicted the target inside that regime, out of sample, after correcting for the number of tests.
+## Timing contract
 
-**Timing:** Prediction is made at the CLOSE of session T. Every feature uses data through the close of T and nothing later. The target covers sessions T+1..T+H, entered at the close of T. Same-day market state (breadth, median move, dispersion) is therefore legitimate: it is known at T close.
+_Prediction is made at the CLOSE of session T. Every feature uses data through the close of T and nothing later. The target covers sessions T+1..T+H, entered at the close of T. Same-day market state (breadth, median move, dispersion) is therefore legitimate: it is known at T close._
 
-Verified on the data: corr(fwd, same day) +0.008, corr(fwd, next day) +0.425.
+Checked against the data on 300,000 rows: corr(forward return, same-day return) **+0.008** (must be ~0); corr(forward return, next-day return) **+0.425** (must be clearly positive). A label containing session T would fail the first.
 
-**Lockbox:** sessions from 2025-03-05 are EXCLUDED from every statistic here. It is the same lockbox regime_research uses; looking at it here would spend it.
+## Features per fold (fold-local selection)
 
-**Missing state:** 0.02% of rows have a missing stock-state input and are scored on observed axes only (mean confidence 0.808 vs 0.799 for complete rows).
+Fold k uses only screens from folds 1..k, each computed on a train window that ends before fold k's test. The all-folds set is used for the lockbox model alone.
 
-## Library
+Each name REPRESENTS A FAMILY: permutation importance shuffled the whole family together, so the named feature is a proxy for the family's information, not independently proven. Family clustering is fold-local and survival is tracked per FEATURE - family IDs are not comparable across folds. 'Beats the null' is a screen, not a significance test.
 
-- features generated: 443 (0 failed to compute)
-- evaluated (coverage >= 30%): 443
-- by category: distribution 5, existing 265, interaction 10, location 8, market-relative 5, momentum 5, representation 138, structure 3, volatility 2, volume 2
-- cells tested: 5,885 (feature x layer x regime)
-- working cells: 181 | working features: 104 | families: 53
-- expected false discoveries among working cells at q<0.05: ~9
+- fold 1: `D_bb_pctB_20`, `D_close_roll_slope_20`, `D_days_since_boh_20`, `D_dist_from_20h`, `D_mdi14`, `D_midpoint_slope`, `D_pdi14`, `ema50_slope10`, `D_atr_pct_z252`, `D_atr_ratio_14_30`, `INDIAVIX_close`, `D_dist_from_52wl`, `D_atr14`, `D_obv`, `D_amihud_20`, `D_realvol_ratio_20_60`, `D_donch_pos_20_rmean50`, `D_upside_vol_ratio`, `MKT_D_rsi14`, `NIFTYMETAL_ret_1d`, `D_WQ_13`, `MKT_D_adx14`, `INDIAVIX_ret_1d`, `NIFTYPHARMA_close`, `NIFTYPSUBANK_close`
+- fold 2: `MKT_D_drawdown_252`, `D_bb_pctB_20`, `D_close_roll_slope_20`, `D_days_since_boh_20`, `ema50_slope10`, `X_rank_D_dist_from_52wl`, `NIFTYCONSUMPTION_close`, `D_atr_pct_z252`, `D_donch_pos_20_rmean50`, `MKT_D_realvol_20`, `D_atr14`, `D_amihud_20`, `volume`, `D_WQ_13`, `INDIAVIX_ret_1d`, `D_macd_hist`, `NIFTYIT_ret_1d`, `NIFTYPHARMA_ret_1d`, `D_WQ_33`, `D_WQ_20`, `X_rank_D_gap_pct`, `D_body_ratio_rmean20`, `X_relvol_20`
+- fold 3: `MKT_D_drawdown_252`, `MKT_D_rsi14`, `D_atr_pct_z252`, `D_dist_from_52wh`, `D_dist_from_52wl`, `D_donch_pos_20_rmean50`, `MKT_D_realvol_20`, `D_atr14`, `D_dollar_vol`, `D_WQ_33`, `D_macd_hist`, `D_WQ_20`, `X_rank_D_gap_pct`, `NIFTYPHARMA_ret_1d`
+- fold 4: `MKT_D_rsi14`, `D_atr_pct_z252`, `D_dist_from_52wh`, `D_dist_from_52wl`, `D_donch_pos_50_rmean50`, `MKT_D_realvol_20`, `D_atr14`, `D_WQ_33`, `D_WQ_41`, `D_macd_hist`, `D_dollar_vol`, `D_WQ_20`, `X_rank_D_gap_pct`, `NIFTYPHARMA_ret_1d`
+- fold 5: `D_dist_from_52wh`, `D_dist_from_52wl`, `D_donch_pos_50_rmean50`, `D_atr14`, `D_WQ_33`, `D_WQ_41`, `D_macd_hist`, `macd_slope5`, `D_WQ_20`, `X_rank_D_gap_pct`, `NIFTYPHARMA_ret_1d`, `D_atr_ratio_14_30`, `D_days_since_boh_20`, `D_close_roll_slope_20`, `NIFTYMEDIA_close`, `NIFTYINFRA_ret_1d`, `NIFTYREALTY_ret_1d`, `D_atr_pct_z252`, `MKT_D_rsi14`, `CRUDEOIL_close`, `D_realvol_ratio_20_60`, `D_downside_dev_60`, `D_realvol_20`, `D_vol_yz_20`, `D_amihud_20`
 
-## Stock regimes (K=9, chosen by BIC on fold-1 train)
+## Incremental model comparison
 
-Alignment drift across folds (mean centroid distance to the fold-1 reference): 0.00, 0.24, 0.33, 0.30, 0.24. Large values mean a regime ID no longer describes the same state.
+Net return per trade = realised bracket return (`label_exit_ret`) minus 35 bp. Intervals are 95% circular block bootstraps over TRADING DAYS (block 10) - 5-session labels overlap, so trades are not independent and a binomial SE would be ~2x too narrow. **clears** = the lower end of the net interval is above 0.
 
-| regime | st_trend | st_trend_strength | st_vol_level | st_vol_change | st_momentum | st_participation | st_location | st_shock | share | base rate |
-|---|---|---|---|---|---|---|---|---|---|---|
-| S0 | -0.35 | -0.07 | +0.02 | -0.03 | -0.33 | +0.01 | -0.18 | +0.26 | 14.7% | 0.002 |
-| S1 | +0.12 | -0.05 | -0.07 | +0.01 | +0.11 | +0.14 | -0.08 | -0.02 | 20.1% | 0.002 |
-| S2 | -0.15 | -0.06 | -0.39 | -0.24 | -0.24 | +0.01 | -0.17 | -0.14 | 9.2% | 0.002 |
-| S3 | -0.32 | -0.10 | -0.05 | -0.04 | -0.33 | -0.06 | -0.21 | -0.23 | 12.0% | 0.003 |
-| S4 | +0.42 | +0.38 | +0.37 | +0.22 | +0.39 | +0.05 | +0.34 | +0.07 | 6.4% | 0.002 |
-| S5 | +0.39 | +0.04 | +0.18 | +0.11 | +0.34 | +0.41 | +0.17 | +0.43 | 5.5% | 0.002 |
-| S6 | -0.06 | -0.08 | -0.08 | -0.06 | -0.05 | -0.35 | -0.04 | -0.09 | 13.8% | 0.002 |
-| S7 | -0.01 | +0.05 | +0.36 | +0.13 | +0.01 | -0.08 | -0.03 | +0.09 | 7.7% | 0.002 |
-| S8 | +0.21 | +0.11 | -0.05 | -0.01 | +0.25 | +0.02 | +0.35 | -0.04 | 10.4% | 0.002 |
+**M0** uses every panel feature with no regimes - the model the feasibility test passed with. If M0 beats M2-M4, the regime machinery adds nothing beyond using all the information.
 
-## Market regimes (K=6, chosen by BIC on fold-1 train)
+**How to read the steps.** M1->M2: does a STATE REPRESENTATION of variables largely already in the library add out-of-sample information? (It is not a test of whether regime discovery found a new information source.) M2->M3: do the selected feature families add to that? M3->M4: do regime x feature interactions add - but only the first five representatives are crossed, so a null M4 means THAT subset added nothing, not that interactions do not matter.
 
-Alignment drift across folds (mean centroid distance to the fold-1 reference): 0.00, 1.21, 3.36, 4.43, 4.36. Large values mean a regime ID no longer describes the same state.
-
-| regime | mk_trend20 | mk_vol20 | mk_breadth20 | mk_disp20 | share | base rate |
+| model | AUC | brier | top-1 net bp | top-3 hit | top-3 net bp [95%] | clears |
 |---|---|---|---|---|---|---|
-| M0 | -0.03 | +1.16 | +0.26 | +0.61 | 3.3% | 0.008 |
-| M1 | -2.53 | +2.74 | -1.46 | +2.00 | 2.6% | 0.003 |
-| M2 | +0.80 | -0.25 | +0.84 | -0.63 | 22.1% | 0.001 |
-| M3 | -1.01 | +0.49 | -1.19 | +0.36 | 29.0% | 0.004 |
-| M4 | +0.17 | -0.46 | +0.00 | +0.79 | 15.0% | 0.000 |
-| M5 | +0.27 | -0.79 | +0.08 | -0.65 | 28.0% | 0.001 |
+| M0_all_features | 0.5297 | 0.2102 | +77 | 0.400 | +41 [+16,+66] | top-1, top-3, top-5, top-10 |
+| M1_base | 0.5377 | 0.2035 | +59 | 0.387 | +27 [+4,+50] | top-1, top-3 |
+| M2_regime | 0.5270 | 0.2039 | +28 | 0.354 | +13 [-10,+35] | top-1 |
+| M3_families | 0.5257 | 0.2045 | +44 | 0.388 | +22 [-2,+45] | top-1, top-5 |
+| M4_interactions | 0.5256 | 0.2055 | +61 | 0.412 | +43 [+20,+66] | top-1, top-3, top-5, top-10 |
 
-Stock-regime persistence (measured): S0 mean run 2.3d, S1 mean run 2.3d, S2 mean run 2.3d, S3 mean run 2.3d, S4 mean run 2.4d, S5 mean run 2.4d, S6 mean run 2.3d, S7 mean run 2.3d, S8 mean run 2.4d
+## Stock-state regime as a trade filter (M4_interactions, daily top-3) - HYPOTHESIS GENERATION
 
-## Works across all stocks (unconditional)
+Research folds only. Choosing the regimes that clear here and then quoting their performance would be another backtest. The choice is LOCKED below and tested once on the untouched lockbox; only that lockbox figure is evidence.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `D_WQ_40` | existing | +0.0247 | +6.7 | 2.6e-08 | 100% | +0.003 | 1801 |
-| `X_z_D_range_pct` | existing | -0.0241 | -3.5 | 0.024 | 100% | -0.002 | 1801 |
-| `D_range_pct` | existing | -0.0241 | -3.5 | 0.024 | 100% | -0.002 | 1801 |
-| `X_rank_D_range_pct` | existing | -0.0241 | -3.5 | 0.024 | 100% | -0.002 | 1801 |
-| `D_WQ_29` | existing | +0.0232 | +4.7 | 0.00071 | 100% | +0.003 | 1801 |
-| `N_dist_lo10` | location | -0.0232 | -5.2 | 0.00011 | 100% | -0.002 | 1801 |
-| `D_ema20_angle_z252` | existing | -0.0225 | -4.8 | 0.00066 | 100% | -0.003 | 1801 |
-| `R_pos_in_52w_range__d5` | representation | -0.0219 | -4.7 | 0.00077 | 100% | -0.003 | 1801 |
-| `D_WQ_16` | existing | +0.0214 | +6.7 | 2.6e-08 | 100% | +0.003 | 1801 |
-| `D_WQ_44` | existing | +0.0213 | +6.9 | 2e-08 | 100% | +0.002 | 1801 |
-| `D_pdi14` | existing | -0.0210 | -5.3 | 9.1e-05 | 100% | -0.002 | 1801 |
-| `D_WQ_13` | existing | +0.0208 | +6.9 | 2e-08 | 100% | +0.003 | 1801 |
-| `D_dist_from_20l` | existing | -0.0196 | -4.5 | 0.0019 | 100% | -0.002 | 1801 |
-| `R_drawdown_252__d5` | representation | -0.0194 | -3.5 | 0.025 | 100% | -0.003 | 1801 |
-| `N_dist_lo50` | location | -0.0194 | -3.7 | 0.018 | 100% | -0.002 | 1801 |
-| `D_weekly_trend` | existing | -0.0192 | -5.1 | 0.00024 | 100% | +nan | 1801 |
-| `M_rel_ret5` | market-relative | -0.0190 | -3.2 | 0.045 | 100% | -0.003 | 1801 |
-| `R_ema20_angle_deg__tsz60` | representation | -0.0187 | -4.1 | 0.0059 | 100% | -0.002 | 1801 |
-| `R_rsi14__d5` | representation | -0.0185 | -4.0 | 0.0059 | 100% | -0.002 | 1801 |
-| `D_rsi14_z252` | existing | -0.0182 | -4.2 | 0.0051 | 100% | -0.002 | 1801 |
-| `R_atr_ratio_14_30__tsz60` | representation | -0.0178 | -4.5 | 0.0019 | 100% | -0.002 | 1801 |
-| `R_rsi7__tsz60` | representation | -0.0175 | -3.9 | 0.0081 | 100% | -0.002 | 1801 |
-| `R_atr_ratio_14_30__d5` | representation | -0.0173 | -4.6 | 0.0011 | 100% | -0.002 | 1801 |
-| `R_pos_in_52w_range__accel` | representation | -0.0171 | -4.5 | 0.0018 | 100% | -0.002 | 1801 |
-| `R_rsi7__d5` | representation | -0.0165 | -3.8 | 0.012 | 100% | -0.002 | 1801 |
+| regime | dates | top-3 hit | top-3 net bp [95%] | clears |
+|---|---|---|---|---|
+| R0 | 1801 | 0.289 | -23 [-53,+9] | no |
+| R1 | 1801 | 0.331 | +1 [-23,+25] | no |
+| R2 | 1800 | 0.306 | -9 [-37,+19] | no |
+| R3 | 1801 | 0.371 | +4 [-18,+25] | no |
+| R4 | 1801 | 0.333 | +1 [-23,+27] | no |
+| R5 | 1801 | 0.356 | +12 [-14,+40] | no |
+| R6 | 1801 | 0.368 | -1 [-18,+18] | no |
+| R7 | 1801 | 0.397 | +41 [+21,+62] | YES |
+| R8 | 1801 | 0.357 | -2 [-22,+20] | no |
 
-### Works in stock regime S0 (2 cells)
+Regime IDs are ALIGNED across folds (K fixed from fold 1, Hungarian matching on centroids); check drift below before trusting an ID's identity over time.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `N_min_ret20` | distribution | +0.0330 | +3.8 | 0.014 | 100% | +0.003 | 1800 |
-| `D_pdi14` | existing | -0.0227 | -3.3 | 0.037 | 100% | -0.002 | 1800 |
+### Performance by stock-state completeness (research folds)
 
-### Works in stock regime S1 (53 cells)
+Rows with missing state inputs are scored on observed axes. If partial rows perform materially worse, they need a confidence adjustment or a missingness-aware feature.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `N_dist_lo10` | location | -0.0382 | -5.5 | 3e-05 | 100% | -0.003 | 1801 |
-| `D_ema20_angle_z252` | existing | -0.0303 | -4.9 | 0.00045 | 80% | -0.003 | 1801 |
-| `D_bb_bw_20` | existing | -0.0297 | -3.6 | 0.021 | 100% | -0.002 | 1801 |
-| `R_bb_bw_20__csrank` | representation | -0.0297 | -3.6 | 0.021 | 100% | -0.002 | 1801 |
-| `R_bb_bw_20__csz` | representation | -0.0297 | -3.6 | 0.021 | 100% | -0.002 | 1801 |
-| `R_pos_in_52w_range__d5` | representation | -0.0291 | -5.0 | 0.00036 | 80% | -0.003 | 1801 |
-| `R_drawdown_252__d5` | representation | -0.0282 | -4.4 | 0.0019 | 80% | -0.003 | 1801 |
-| `X_z_D_range_pct` | existing | -0.0263 | -3.5 | 0.024 | 80% | -0.002 | 1801 |
-| `D_range_pct` | existing | -0.0263 | -3.5 | 0.024 | 80% | -0.002 | 1801 |
-| `X_rank_D_range_pct` | existing | -0.0263 | -3.5 | 0.024 | 80% | -0.002 | 1801 |
-| `D_rsi14_z252` | existing | -0.0263 | -4.4 | 0.0024 | 80% | -0.003 | 1801 |
-| `D_dist_from_20l` | existing | -0.0255 | -4.6 | 0.001 | 80% | -0.003 | 1801 |
+| state inputs observed | dates | top-3 hit | top-3 net bp [95%] |
+|---|---|---|---|
+| 8/8 | 1801 | 0.412 | +43 [+20,+66] |
+| 7/8 | 42 | 0.167 | -35 [-35,-35] |
 
-### Works in stock regime S2 (0 cells)
+## Feature-by-regime rank IC (descriptive, fold 5 test)
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
+Rank IC of each representative against the target, computed separately inside each regime. `.` = |IC| < 0.01.
 
-### Works in stock regime S3 (3 cells)
+| feature | R0 | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 |
+|---|---|---|---|---|---|---|---|---|---|
+| `D_dist_from_52wh` | -0.014 | +0.040 | +0.041 | +0.062 | +0.020 | -0.015 | +0.014 | . | +0.045 |
+| `D_dist_from_52wl` | +0.028 | +0.052 | +0.032 | +0.051 | +0.039 | +0.014 | +0.018 | +0.029 | +0.047 |
+| `D_donch_pos_50_rmean50` | +0.014 | +0.034 | . | +0.025 | +0.012 | . | +0.016 | . | +0.022 |
+| `D_atr14` | -0.034 | -0.026 | -0.010 | -0.030 | -0.019 | -0.035 | . | -0.049 | -0.019 |
+| `D_WQ_33` | +0.043 | -0.027 | +0.015 | -0.045 | -0.013 | . | . | -0.020 | -0.015 |
+| `D_macd_hist` | . | . | . | . | . | . | -0.021 | -0.046 | -0.015 |
+| `macd_slope5` | -0.042 | . | . | . | -0.026 | -0.039 | -0.039 | -0.024 | -0.024 |
+| `D_WQ_20` | . | -0.037 | . | -0.031 | -0.030 | -0.014 | . | -0.025 | -0.028 |
+| `X_rank_D_gap_pct` | +0.017 | . | . | +0.012 | . | . | -0.022 | +0.024 | . |
+| `NIFTYPHARMA_ret_1d` | . | +0.051 | +0.015 | +0.023 | +0.040 | +0.029 | +0.034 | +0.014 | +0.028 |
+| `D_atr_ratio_14_30` | -0.022 | -0.029 | -0.017 | . | -0.015 | -0.030 | -0.027 | . | -0.025 |
+| `D_days_since_boh_20` | +0.010 | -0.012 | -0.024 | -0.037 | . | +0.034 | . | +0.011 | . |
+| `D_close_roll_slope_20` | +0.023 | +0.020 | +0.013 | . | +0.023 | . | +0.011 | -0.038 | . |
+| `NIFTYMEDIA_close` | -0.036 | +0.061 | +0.011 | +0.057 | +0.022 | . | +0.023 | +0.020 | +0.041 |
+| `NIFTYINFRA_ret_1d` | . | +0.081 | +0.013 | +0.055 | +0.068 | +0.061 | +0.054 | +0.031 | +0.054 |
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `D_WQ_16` | existing | +0.0262 | +3.7 | 0.016 | 100% | +0.003 | 1738 |
-| `D_WQ_44` | existing | +0.0258 | +3.6 | 0.021 | 100% | +0.003 | 1738 |
-| `D_WQ_13` | existing | +0.0237 | +3.5 | 0.025 | 100% | +0.003 | 1738 |
+## Stock-state regimes (K=9)
 
-### Works in stock regime S4 (6 cells)
+These are RELATIVE STOCK states - per-date cross-sectional ranks, so 'high RSI' means high versus peers TODAY, not RSI above some level - and not market regimes. Market state enters the models as separate features.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `N_dist_lo10` | location | -0.0370 | -3.6 | 0.021 | 100% | -0.005 | 1376 |
-| `D_atr_pct_z252` | existing | -0.0351 | -3.2 | 0.049 | 100% | -0.004 | 1391 |
-| `D_range_pct` | existing | -0.0350 | -3.2 | 0.049 | 100% | -0.004 | 1391 |
-| `X_rank_D_range_pct` | existing | -0.0350 | -3.2 | 0.049 | 100% | -0.004 | 1391 |
-| `X_z_D_range_pct` | existing | -0.0350 | -3.2 | 0.049 | 100% | -0.004 | 1391 |
-| `D_days_since_5pct_up` | existing | +0.0330 | +3.2 | 0.047 | 100% | +0.004 | 1391 |
+**What BIC does and does not say.** K was chosen by BIC on fold 1: the mixture that best DESCRIBES the state distribution. That is a clustering criterion, not evidence the states predict anything. Three separate questions, three separate answers:
 
-### Works in stock regime S5 (4 cells)
+- description (BIC): K=9
+- stability (centroid drift vs fold 1): f1 0.000, f2 0.318, f3 0.190, f4 0.270, f5 0.270
+- predictive value: M2 minus M1 in the comparison table above
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `N_dist_hi10` | location | +0.0440 | +4.0 | 0.0073 | 100% | +0.005 | 1570 |
-| `N_clv` | structure | +0.0419 | +4.2 | 0.0043 | 100% | +0.005 | 1577 |
-| `N_body_range` | structure | +0.0407 | +4.1 | 0.0051 | 100% | +0.005 | 1577 |
-| `D_body_ratio` | existing | +0.0407 | +4.1 | 0.0051 | 100% | +0.005 | 1577 |
+**Missing state inputs** (scored on observed axes, never imputed):
 
-### Works in stock regime S6 (0 cells)
+| fold | rows with any missing | all missing | conf complete | conf partial | conf all-missing |
+|---|---|---|---|---|---|
+| 1 | 0.00% | 0.00% | 0.804 | nan | nan |
+| 2 | 0.00% | 0.00% | 0.800 | nan | nan |
+| 3 | 0.00% | 0.00% | 0.796 | nan | nan |
+| 4 | 0.00% | 0.00% | 0.795 | nan | nan |
+| 5 | 0.00% | 0.00% | 0.788 | 0.878 | nan |
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
+### Centroids (fold 5 engine, aligned)
 
-### Works in stock regime S7 (18 cells)
+Centroids are centred per-date ranks: +0.5 = top of the cross-section today, -0.5 = bottom.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `X_z_D_downside_dev_60` | existing | -0.0412 | -4.1 | 0.0059 | 100% | -0.004 | 1731 |
-| `D_downside_dev_60` | existing | -0.0412 | -4.1 | 0.0059 | 100% | -0.004 | 1731 |
-| `X_rank_D_downside_dev_60` | existing | -0.0412 | -4.1 | 0.0059 | 100% | -0.004 | 1731 |
-| `X_z_D_atr_pct` | existing | -0.0397 | -3.5 | 0.025 | 100% | -0.003 | 1731 |
-| `R_atr_pct__csrank` | representation | -0.0397 | -3.5 | 0.025 | 100% | -0.003 | 1731 |
-| `D_atr_pct` | existing | -0.0397 | -3.5 | 0.025 | 100% | -0.003 | 1731 |
-| `X_rank_D_atr_pct` | existing | -0.0397 | -3.5 | 0.025 | 100% | -0.003 | 1731 |
-| `R_atr_pct__csz` | representation | -0.0397 | -3.5 | 0.025 | 100% | -0.003 | 1731 |
-| `D_vol_yz_20` | existing | -0.0388 | -3.6 | 0.021 | 100% | -0.003 | 1731 |
-| `X_z_D_range_pct` | existing | -0.0381 | -4.1 | 0.0059 | 100% | -0.005 | 1731 |
-| `X_rank_D_range_pct` | existing | -0.0381 | -4.1 | 0.0059 | 100% | -0.005 | 1731 |
-| `D_range_pct` | existing | -0.0381 | -4.1 | 0.0059 | 100% | -0.005 | 1731 |
+| regime | trend | trend_strength | vol_level | vol_change | momentum | participation | location | shock |
+|---|---|---|---|---|---|---|---|---|
+| R0 | -0.38 | +0.06 | +0.36 | +0.12 | -0.26 | -0.05 | -0.14 | +0.12 |
+| R1 | -0.00 | -0.34 | -0.10 | -0.07 | -0.02 | +0.03 | -0.04 | -0.06 |
+| R2 | +0.23 | +0.21 | +0.40 | +0.40 | +0.18 | -0.03 | +0.04 | +0.06 |
+| R3 | +0.33 | +0.00 | +0.14 | +0.08 | +0.28 | +0.39 | +0.10 | +0.41 |
+| R4 | -0.17 | -0.06 | -0.05 | -0.09 | -0.16 | -0.38 | -0.07 | -0.08 |
+| R5 | -0.28 | -0.00 | +0.01 | -0.01 | -0.27 | +0.07 | -0.16 | +0.03 |
+| R6 | -0.15 | -0.02 | -0.38 | -0.20 | -0.26 | +0.02 | -0.15 | -0.14 |
+| R7 | +0.37 | +0.18 | +0.07 | +0.06 | +0.38 | +0.08 | +0.41 | -0.00 |
+| R8 | +0.15 | +0.13 | -0.05 | -0.02 | +0.17 | +0.02 | +0.04 | -0.05 |
 
-### Works in stock regime S8 (6 cells)
+K chosen by BIC per fold: fold 1: 9, fold 2: 9, fold 3: 9, fold 4: 9, fold 5: 9
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `D_range_pct` | existing | -0.0312 | -3.5 | 0.025 | 100% | -0.002 | 1801 |
-| `X_rank_D_range_pct` | existing | -0.0312 | -3.5 | 0.025 | 100% | -0.002 | 1801 |
-| `X_z_D_range_pct` | existing | -0.0312 | -3.5 | 0.025 | 100% | -0.002 | 1801 |
-| `D_dist_from_52wl` | existing | +0.0286 | +3.6 | 0.021 | 100% | +0.002 | 1801 |
-| `X_rank_D_dist_from_52wl` | existing | +0.0286 | +3.6 | 0.021 | 100% | +0.002 | 1801 |
-| `X_z_D_dist_from_52wl` | existing | +0.0286 | +3.6 | 0.021 | 100% | +0.002 | 1801 |
+## Persistence (measured, never imposed)
 
-### Works in market regime M0 (0 cells)
+| regime | P(stay) | mean run | median run |
+|---|---|---|---|
+| R0 | 0.72 | 3.5 | 2 |
+| R1 | 0.65 | 2.9 | 2 |
+| R2 | 0.73 | 3.6 | 2 |
+| R3 | 0.20 | 1.3 | 1 |
+| R4 | 0.43 | 1.7 | 1 |
+| R5 | 0.57 | 2.3 | 1 |
+| R6 | 0.68 | 3.1 | 2 |
+| R7 | 0.73 | 3.6 | 2 |
+| R8 | 0.66 | 2.9 | 2 |
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
+## Feature survival funnel
 
-### Works in market regime M1 (0 cells)
+- hygiene rejected: 19
+- duplicates removed (|r|>=0.999): 21
+- candidates entering each fold: 236
+- stable (beat fold-local null in >= 80% of folds): 111
+- family representatives kept: 25
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
+Representatives: `D_dist_from_52wh`, `D_dist_from_52wl`, `D_donch_pos_50_rmean50`, `D_atr14`, `D_WQ_33`, `D_macd_hist`, `macd_slope5`, `D_WQ_20`, `X_rank_D_gap_pct`, `NIFTYPHARMA_ret_1d`, `D_atr_ratio_14_30`, `D_days_since_boh_20`, `D_close_roll_slope_20`, `NIFTYMEDIA_close`, `NIFTYINFRA_ret_1d`, `NIFTYREALTY_ret_1d`, `D_atr_pct_z252`, `MKT_D_rsi14`, `CRUDEOIL_close`, `D_realvol_ratio_20_60`, `D_downside_dev_60`, `D_realvol_20`, `D_vol_yz_20`, `D_amihud_20`, `D_obv`
 
-### Works in market regime M2 (2 cells)
+| feature | folds survived | survival | mean family importance |
+|---|---|---|---|
+| `D_dist_from_52wh` | 5/5 | 100% | +0.00329 |
+| `D_dist_from_52wl` | 5/5 | 100% | +0.00329 |
+| `D_drawdown_252` | 5/5 | 100% | +0.00329 |
+| `D_ema_stack_20_50_100` | 5/5 | 100% | +0.00329 |
+| `D_pos_in_52w_range` | 5/5 | 100% | +0.00329 |
+| `X_rank_D_dist_from_52wh` | 5/5 | 100% | +0.00329 |
+| `X_rank_D_drawdown_252` | 5/5 | 100% | +0.00329 |
+| `X_rank_D_pos_in_52w_range` | 5/5 | 100% | +0.00329 |
+| `X_z_D_dist_from_52wh` | 5/5 | 100% | +0.00329 |
+| `X_z_D_drawdown_252` | 5/5 | 100% | +0.00329 |
+| `X_z_D_pos_in_52w_range` | 5/5 | 100% | +0.00329 |
+| `dist_ema20_ema50_atr` | 5/5 | 100% | +0.00329 |
+| `X_rank_D_dist_from_52wl` | 5/5 | 100% | +0.00297 |
+| `X_z_D_dist_from_52wl` | 5/5 | 100% | +0.00297 |
+| `D_donch_pos_50_rmean50` | 5/5 | 100% | +0.00278 |
+| `D_atr14` | 5/5 | 100% | +0.00188 |
+| `D_atr30` | 5/5 | 100% | +0.00188 |
+| `D_close_roll_slope_20_rstd10` | 5/5 | 100% | +0.00188 |
+| `D_close_roll_slope_20_rstd20` | 5/5 | 100% | +0.00188 |
+| `D_ema50` | 5/5 | 100% | +0.00188 |
+| `D_macd_hist_rstd10` | 5/5 | 100% | +0.00188 |
+| `D_slope_stability` | 5/5 | 100% | +0.00188 |
+| `D_slope_stability_rmean50` | 5/5 | 100% | +0.00188 |
+| `D_slope_stability_rstd10` | 5/5 | 100% | +0.00188 |
+| `D_slope_stability_rstd20` | 5/5 | 100% | +0.00188 |
+| `D_sma200` | 5/5 | 100% | +0.00188 |
+| `open` | 5/5 | 100% | +0.00188 |
+| `D_WQ_33` | 5/5 | 100% | +0.00095 |
+| `D_WQ_41` | 5/5 | 100% | +0.00095 |
+| `D_body_ratio` | 5/5 | 100% | +0.00095 |
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `N_dist_lo10` | location | -0.0297 | -3.3 | 0.04 | 100% | -0.003 | 366 |
-| `D_WQ_40` | existing | +0.0281 | +3.5 | 0.024 | 100% | +0.003 | 366 |
+## Lockbox - the only evidence in this report
 
-### Works in market regime M3 (18 cells)
+Hypothesis locked at 2026-09-26T21:59:13, BEFORE any lockbox row was scored: model **M4_interactions**, regime filter **[7]**.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `R_rsi14__d5` | representation | -0.0342 | -3.4 | 0.025 | 100% | -0.004 | 466 |
-| `D_mdi14_diff5` | existing | +0.0330 | +3.6 | 0.021 | 100% | +0.004 | 466 |
-| `R_rsi7__d5` | representation | -0.0309 | -3.4 | 0.025 | 100% | -0.004 | 466 |
-| `R_dist_from_20h__d5` | representation | -0.0308 | -3.5 | 0.025 | 100% | -0.004 | 466 |
-| `D_mdi14_rrank10` | existing | +0.0301 | +3.5 | 0.024 | 100% | +0.003 | 466 |
-| `D_WQ_13` | existing | +0.0280 | +4.1 | 0.0054 | 100% | +0.003 | 466 |
-| `D_WQ_44` | existing | +0.0276 | +4.6 | 0.0011 | 100% | +0.003 | 466 |
-| `D_WQ_16` | existing | +0.0273 | +4.0 | 0.0077 | 100% | +0.003 | 466 |
-| `R_pos_in_52w_range__accel` | representation | -0.0263 | -3.2 | 0.043 | 100% | -0.003 | 466 |
-| `D_WQ_35` | existing | +0.0260 | +3.4 | 0.031 | 100% | +0.003 | 466 |
-| `D_WQ_40` | existing | +0.0259 | +3.4 | 0.031 | 100% | +0.003 | 466 |
-| `R_rsi14__accel` | representation | -0.0239 | -3.2 | 0.045 | 100% | -0.003 | 466 |
+This tests whether THIS research-selected hypothesis survives untouched data. It does not test whether regime research works in general. The regime engine here was fitted ONCE on all research data (the deployment protocol), unlike the per-fold walk-forward engines, so its drift is not comparable to theirs.
 
-### Works in market regime M4 (4 cells)
+Lockbox: **378 sessions**, 434,231 rows. AUC 0.5199 | brier 0.2079 | logloss 0.6358 | base rate 0.276.
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `D_WQ_40` | existing | +0.0262 | +3.3 | 0.04 | 100% | +0.003 | 323 |
-| `R_realvol_ratio_20_60__d5` | representation | -0.0238 | -3.5 | 0.025 | 100% | -0.003 | 323 |
-| `R_compress_state__tsz60` | representation | -0.0234 | -3.2 | 0.043 | 100% | -0.002 | 323 |
-| `D_WQ_44` | existing | +0.0233 | +3.3 | 0.038 | 100% | +0.003 | 323 |
+**Buy everything** (equal weight, same bracket and cost): -23 bp [-55,+14] per trade. The model's contribution is its excess over this.
 
-### Works in market regime M5 (2 cells)
+| | dates | hit | net bp [95%] | clears |
+|---|---|---|---|---|
+| research top-3 (in-sample choice) | 1801 | 0.412 | +43 [+20,+66] | - |
+| **lockbox top-1** | 378 | **0.394** | **+33 [-7,+76]** | **no** |
+| **lockbox top-3** | 378 | **0.377** | **+18 [-16,+54]** | **no** |
+| **lockbox top-5** | 378 | **0.359** | **+5 [-27,+40]** | **no** |
+| **lockbox top-10** | 378 | **0.356** | **+1 [-28,+32]** | **no** |
 
-| feature | category | IC | t | q | fold sign | top-bot hit | dates |
-|---|---|---|---|---|---|---|---|
-| `D_WQ_40` | existing | +0.0227 | +3.2 | 0.046 | 100% | +0.002 | 471 |
-| `D_WQ_13` | existing | +0.0160 | +3.3 | 0.039 | 100% | +0.002 | 471 |
+| excess over buy-everything | bp [95%] | above zero |
+|---|---|---|
+| **lockbox top-1** | **+56 [+25,+86]** | **YES** |
+| **lockbox top-3** | **+40 [+16,+65]** | **YES** |
+| **lockbox top-5** | **+27 [+7,+47]** | **YES** |
+| **lockbox top-10** | **+24 [+7,+40]** | **YES** |
 
-## Sign flips - works one way here, the opposite way there
+| **lockbox, locked regimes, top-3** | 378 | **0.350** | **+4 [-27,+39]** | **no** |
 
-HYPOTHESES, not findings: selected from many tests, so each needs its own confirmation on data not used to find it.
+**By year (top-3):** 2025: 0.408 hit, +34 [-7,+70] bp | 2026: 0.339 hit, -1 [-57,+65] bp
 
-A feature significant with OPPOSITE signs in two regimes. An unconditional model averages these into nothing; this is exactly the information regime conditioning exists to recover.
+**Regime mix:** R0 13% of rows / 4% of picks | R1 8% of rows / 0% of picks | R2 5% of rows / 1% of picks | R3 5% of rows / 5% of picks | R4 13% of rows / 9% of picks | R5 16% of rows / 15% of picks | R6 9% of rows / 17% of picks | R7 12% of rows / 32% of picks | R8 19% of rows / 18% of picks
 
-_None survived the FDR and stability bars._
+**By state completeness (top-3):** 7/8: 0.078, -35 [-35,-35] bp | 8/8: 0.377, +18 [-16,+54] bp
 
-## Feature x regime matrix (top 40 by max |IC|)
+**Calibration (lockbox deciles):** 0.26->0.24, 0.29->0.27, 0.30->0.26, 0.30->0.27, 0.31->0.28, 0.31->0.29, 0.33->0.28, 0.35->0.29, 0.36->0.29, 0.51->0.28
 
-`*` = working (FDR + stable + material). Blank = too few dates.
+## Verdict
 
-| feature | ALL | S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 | M0 | M1 | M2 | M3 | M4 | M5 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `D_atr_pct` | -0.020 | -0.022 | -0.021 | +0.003 | -0.019 | -0.042 | -0.022 | -0.018 | -0.040* | -0.027 | +0.065 | -0.034 | -0.031 | -0.002 | -0.049 | -0.026 |
-| `X_rank_D_atr_pct` | -0.020 | -0.022 | -0.021 | +0.003 | -0.019 | -0.042 | -0.022 | -0.018 | -0.040* | -0.027 | +0.065 | -0.034 | -0.031 | -0.002 | -0.049 | -0.026 |
-| `R_atr_pct__csz` | -0.020 | -0.022 | -0.021 | +0.003 | -0.019 | -0.042 | -0.022 | -0.018 | -0.040* | -0.027 | +0.065 | -0.034 | -0.031 | -0.002 | -0.049 | -0.026 |
-| `R_atr_pct__csrank` | -0.020 | -0.022 | -0.021 | +0.003 | -0.019 | -0.042 | -0.022 | -0.018 | -0.040* | -0.027 | +0.065 | -0.034 | -0.031 | -0.002 | -0.049 | -0.026 |
-| `X_z_D_atr_pct` | -0.020 | -0.022 | -0.021 | +0.003 | -0.019 | -0.042 | -0.022 | -0.018 | -0.040* | -0.027 | +0.065 | -0.034 | -0.031 | -0.002 | -0.049 | -0.026 |
-| `R_pos_in_52w_range__d5` | -0.022* | -0.022 | -0.029* | -0.013 | -0.013 | -0.014 | -0.004 | -0.013 | -0.025 | -0.014 | -0.048 | -0.060 | -0.017 | -0.033 | -0.004 | -0.016 |
-| `D_WQ_29` | +0.023* | +0.016 | +0.024* | +0.013 | +0.007 | +0.025 | +0.008 | +0.007 | +0.028* | +0.014 | +0.041 | +0.059 | +0.019 | +0.031 | +0.011 | +0.018 |
-| `D_vol_yz_50` | -0.019 | -0.022 | -0.018 | +0.011 | -0.020 | -0.029 | -0.015 | -0.018 | -0.036* | -0.019 | +0.059 | -0.047 | -0.027 | -0.002 | -0.043 | -0.024 |
-| `D_vol_yz_20` | -0.022 | -0.024 | -0.022 | +0.011 | -0.018 | -0.037 | -0.023 | -0.019 | -0.039* | -0.017 | +0.057 | -0.055 | -0.030 | -0.006 | -0.043 | -0.025 |
-| `R_atr_ratio_14_30__d20` | -0.012 | -0.005 | -0.016 | -0.005 | -0.004 | -0.016 | -0.024 | -0.003 | -0.008 | +0.003 | -0.009 | -0.057 | -0.013 | -0.005 | -0.017 | -0.008 |
-| `R_donch_pos_20__tsz60` | -0.013* | -0.001 | -0.020* | -0.006 | -0.005 | -0.011 | +0.009 | -0.007 | -0.012 | -0.006 | -0.015 | -0.056 | -0.014 | -0.024 | +0.003 | -0.006 |
-| `D_dist_from_20l` | -0.020* | -0.013 | -0.026* | -0.012 | -0.011 | -0.014 | -0.011 | -0.005 | -0.020 | -0.006 | -0.033 | -0.056 | -0.025 | -0.023 | -0.010 | -0.010 |
-| `N_dist_hi100` | +0.008 | +0.013 | +0.013 | +0.004 | +0.005 | +0.027 | +0.029 | +0.020 | +0.019 | +0.014 | -0.055 | +0.004 | +0.003 | +0.013 | +0.017 | +0.014 |
-| `R_rsi14__tsz60` | -0.016* | -0.003 | -0.022* | -0.006 | -0.006 | -0.012 | -0.005 | -0.006 | -0.012 | -0.008 | -0.019 | -0.055 | -0.020 | -0.021 | -0.001 | -0.012 |
-| `R_ema20_angle_deg__tsz60` | -0.019* | -0.006 | -0.022* | -0.009 | -0.006 | -0.021 | -0.007 | -0.010 | -0.019 | -0.009 | -0.023 | -0.055 | -0.021 | -0.026 | -0.003 | -0.013 |
-| `D_dollar_vol` | -0.007 | -0.013 | -0.004 | -0.009 | -0.005 | -0.026 | -0.001 | +0.003 | -0.014 | -0.007 | -0.054 | +0.023 | -0.003 | -0.013 | +0.000 | -0.006 |
-| `X_z_D_range_pct` | -0.024* | -0.010 | -0.026* | -0.001 | -0.003 | -0.035* | -0.029 | -0.014 | -0.038* | -0.031* | +0.010 | -0.054 | -0.033 | -0.006 | -0.040 | -0.025 |
-| `X_rank_D_range_pct` | -0.024* | -0.010 | -0.026* | -0.001 | -0.003 | -0.035* | -0.029 | -0.014 | -0.038* | -0.031* | +0.010 | -0.054 | -0.033 | -0.006 | -0.040 | -0.025 |
-| `D_range_pct` | -0.024* | -0.010 | -0.026* | -0.001 | -0.003 | -0.035* | -0.029 | -0.014 | -0.038* | -0.031* | +0.010 | -0.054 | -0.033 | -0.006 | -0.040 | -0.025 |
-| `D_amihud_60` | -0.002 | +0.010 | -0.003 | +0.017 | +0.006 | +0.002 | -0.009 | -0.004 | -0.003 | -0.001 | +0.053 | -0.040 | -0.010 | +0.011 | -0.014 | -0.006 |
-| `N_dist_hi250` | +0.013 | +0.013 | +0.024 | +0.004 | +0.010 | +0.024 | +0.021 | +0.022 | +0.021 | +0.016 | -0.052 | +0.017 | +0.007 | +0.018 | +0.021 | +0.019 |
-| `N_dist_hi50` | +0.005 | +0.014 | +0.006 | -0.003 | +0.004 | +0.021 | +0.031 | +0.016 | +0.019 | +0.012 | -0.052 | -0.013 | -0.001 | +0.008 | +0.024 | +0.009 |
-| `N_ret120` | +0.004 | +0.002 | +0.010 | +0.004 | +0.003 | +0.009 | +0.005 | +0.013 | -0.001 | -0.004 | -0.051 | +0.019 | -0.004 | +0.016 | -0.014 | +0.018 |
-| `X_z_D_donch_pos_20` | -0.013 | -0.004 | -0.018* | -0.008 | -0.010 | -0.006 | +0.016 | +0.001 | -0.008 | -0.008 | -0.035 | -0.051 | -0.016 | -0.018 | +0.000 | -0.005 |
-| `X_rank_D_donch_pos_20` | -0.013 | -0.004 | -0.018* | -0.008 | -0.010 | -0.006 | +0.016 | +0.001 | -0.008 | -0.008 | -0.035 | -0.051 | -0.016 | -0.018 | +0.000 | -0.005 |
-| `D_donch_pos_20` | -0.013 | -0.004 | -0.018* | -0.008 | -0.010 | -0.006 | +0.016 | +0.001 | -0.008 | -0.008 | -0.035 | -0.051 | -0.016 | -0.018 | +0.000 | -0.005 |
-| `R_donch_pos_20__csz` | -0.013 | -0.004 | -0.018* | -0.008 | -0.010 | -0.006 | +0.016 | +0.001 | -0.008 | -0.008 | -0.035 | -0.051 | -0.016 | -0.018 | +0.000 | -0.005 |
-| `R_donch_pos_20__csrank` | -0.013 | -0.004 | -0.018* | -0.008 | -0.010 | -0.006 | +0.016 | +0.001 | -0.008 | -0.008 | -0.035 | -0.051 | -0.016 | -0.018 | +0.000 | -0.005 |
-| `R_drawdown_252__d5` | -0.019* | -0.016 | -0.028* | -0.008 | -0.011 | -0.011 | -0.005 | -0.009 | -0.023 | -0.012 | -0.046 | -0.051 | -0.015 | -0.033 | +0.002 | -0.013 |
-| `N_dist_lo50` | -0.019* | -0.009 | -0.026 | -0.004 | -0.005 | -0.024 | -0.014 | -0.003 | -0.035* | -0.019 | +0.006 | -0.051 | -0.033 | -0.014 | -0.016 | -0.016 |
-| `M_ivol60` | -0.019 | -0.022 | -0.020 | -0.003 | -0.016 | -0.029 | -0.015 | -0.012 | -0.029 | -0.025 | +0.050 | -0.026 | -0.028 | -0.010 | -0.040 | -0.020 |
-| `R_dist_from_20h__tsz60` | -0.011 | -0.004 | -0.013 | -0.005 | -0.006 | -0.011 | +0.012 | -0.004 | -0.013 | -0.006 | -0.019 | -0.050 | -0.013 | -0.020 | +0.008 | -0.006 |
-| `D_amihud_20` | -0.003 | +0.011 | -0.006 | +0.014 | +0.006 | +0.005 | -0.011 | -0.005 | -0.005 | -0.002 | +0.050 | -0.040 | -0.009 | +0.008 | -0.013 | -0.006 |
-| `X_rank_D_amihud_20` | -0.003 | +0.011 | -0.006 | +0.014 | +0.006 | +0.005 | -0.011 | -0.005 | -0.005 | -0.002 | +0.050 | -0.040 | -0.009 | +0.008 | -0.013 | -0.006 |
-| `X_z_D_amihud_20` | -0.003 | +0.011 | -0.006 | +0.014 | +0.006 | +0.005 | -0.011 | -0.005 | -0.005 | -0.002 | +0.050 | -0.040 | -0.009 | +0.008 | -0.013 | -0.006 |
-| `N_dist_lo10` | -0.023* | -0.015 | -0.038* | -0.013 | -0.009 | -0.037* | -0.021 | -0.007 | -0.038* | -0.021 | -0.005 | -0.049 | -0.030* | -0.017 | -0.024 | -0.022 |
-| `D_ema20_angle_z252` | -0.022* | -0.006 | -0.030* | -0.014 | -0.009 | -0.026 | -0.014 | -0.005 | -0.023 | -0.015 | -0.040 | -0.049 | -0.026 | -0.026 | -0.011 | -0.016 |
-| `R_atr_ratio_14_30__tsz60` | -0.018* | -0.007 | -0.024* | -0.007 | -0.013 | -0.018 | -0.027 | -0.009 | -0.019 | -0.000 | -0.022 | -0.049 | -0.023 | -0.009 | -0.016 | -0.018 |
-| `D_weekly_trend` | -0.019* | -0.017 | -0.024* | -0.001 | -0.017 | -0.027 | -0.006 | -0.004 | -0.024 | -0.019 | -0.049 | -0.032 | -0.017 | -0.018 | -0.013 | -0.018 |
-| `D_rsi14_z252` | -0.018* | -0.002 | -0.026* | -0.004 | -0.003 | -0.012 | -0.006 | -0.001 | -0.012 | -0.012 | -0.033 | -0.048 | -0.021 | -0.019 | -0.008 | -0.014 |
+- Research AUC 0.5377 -> 0.5256 (-0.0121) from M1 to M4_interactions.
+- Research-fold net return clears zero for: M0_all_features top-1, M0_all_features top-3, M0_all_features top-5, M0_all_features top-10, M1_base top-1, M1_base top-3, M2_regime top-1, M3_families top-1, M3_families top-5, M4_interactions top-1, M4_interactions top-3, M4_interactions top-5, M4_interactions top-10 (in-sample choice).
+- **Lockbox top-3: net does not clear; beats buying everything: YES** - the only result here that was not selected on the data it is scored on. Both are needed: net above zero, and above the market.
 
-## Caveats
-
-- Exploratory. A working cell is evidence to test, not a validated edge.
-- About 5% of working cells are expected to be false discoveries by construction of the FDR bar.
-- IC is cross-sectional ranking skill. It is not a return, and it ignores costs; `top-bot hit` is the gap in the mean target between the top and bottom quintile within the regime - a hit-rate gap for a 0/1 target, a return gap for label_exit_ret.
-- Regime IDs are aligned across folds by centroid matching; check the drift figures before trusting a regime's identity over time.
-- In-sample regime labels (before the first test window) never enter the statistics.
+_Not a backtest: no slippage, sizing, capacity, borrow or MTF financing; net return uses one flat cost. Regime IDs are aligned across folds. Every result is OOS on walk-forward folds with a 5-session embargo; the calibrator never saw a test window._
