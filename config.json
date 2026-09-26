@@ -1,0 +1,52 @@
+{
+  "run_id": "RUN_20260926_002",
+  "hash": "dbb1474f59033a76",
+  "code": "regime_research v9",
+  "created": "2026-09-26T22:41:12.626993",
+  "config": {
+    "target": "label_tp_before_sl",
+    "n_splits": 5,
+    "k_range": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "gmm_fit_rows": 150000,
+    "gmm_select_rows": 40000,
+    "fit_cap": 400000,
+    "val_fraction": 0.2,
+    "val_rows": 60000,
+    "perm_repeats": 5,
+    "family_corr": 0.7,
+    "n_sentinels": 50,
+    "null_sigmas": 3.0,
+    "min_fold_survival": 0.8,
+    "calib_fraction": 0.25,
+    "embargo": 5,
+    "cost_bps": 35.0,
+    "boot_B": 2000,
+    "min_regime_dates": 150,
+    "top_n": [
+      1,
+      3,
+      5,
+      10
+    ],
+    "max_family_reps": 25,
+    "seed": 0,
+    "horizon": 5,
+    "lockbox_fraction": 0.15
+  },
+  "fingerprint": {
+    "panel": "C:\\QuantData\\cache_daily\\panel\\panel.parquet",
+    "size": 1515667308,
+    "build_signature": "b7feac2e004393a3",
+    "rows": 1946566,
+    "last_session": "2026-09-22"
+  }
+}
